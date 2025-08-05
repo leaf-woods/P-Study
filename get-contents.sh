@@ -1,21 +1,24 @@
 #!/bin/bash
 
-date;
-echo "Get contents based on exppoems.csv.";
-echo "Prerequites: exppoems.csv and exppoemsbg5.csv are under same directory where this program locates.";
-echo;
+#print_header;
 
 # 登鸛雀樓：必須是繁體中文， 必須有作者
+
+DEBUG=0;
 
 URL=" https://zh.wikisource.org/wiki/";
 # Traditional Chinese characters
 AMBIGUITY="可以指";
+
 FOUND=1;
 NOT_FOUND=0;
 
-title="";
 author="";
 row="";
+title="";
+typeid="";
+
+type="";
 
 response="";
 received="";
@@ -34,18 +37,29 @@ found=$NOT_FOUND;
 #echo "clean var: $var";
 ############################
 
+print_header() {
+    date;
+    echo "Get contents based on exppoems.csv.";
+    echo "Prerequites: exppoems.csv and exppoemsbg5.csv are under same directory where this program locates.";
+    echo;
+}
+
 proc_not_found() {
-    echo "Cannot get contents for entry [$title, $author].";
+    echo "$row;Cannot get contents for entry [$title, $author].";
 }
 
 proc_result() {
-    echo Content: $1;
+    if [ $DEBUG  == 1 ]
+    then
+        echo Content found: ;
+    fi
+    echo $row";"$1;
     i=$((i+1));
     found_records="$found_records $row;$title;$author\n";
 }
 
 proc_ambiguity() {
-    local rv=$NOT_FOUND;
+    #local rv=$NOT_FOUND;
     set -o noglob;
     IFS=$' \t\r\n';
     uarray=($received);   
@@ -58,13 +72,17 @@ proc_ambiguity() {
         ar=${ar##*/};
         #echo "Processing: $ar";
         url=$URL$ar;
-        echo "Processing hyperlink: get data from Url: $url";
 
+        if [ $DEBUG  == 1 ]
+        then
+            echo "Processing hyperlink: get data from Url: $url";
+        fi
+        
         if [[ $url =~ "(" ]]
         then
-            echo "Substitute paranthesis.";
+            #echo "Substitute parenthesis.";
             url=$(echo $url | sed 's/(/\%28/g' | sed 's/)/\%29/g');
-            echo "Using url: $url";
+            #echo "Using url: $url";
         fi
     
         received=$(curl $url 2>&1 | awk '/title=\"Author:/{print}/<div class=\"poem\">/{p=1;next}/<\x2fdiv>/{p=0}p{print}');  
@@ -97,21 +115,28 @@ title=$(echo $line | awk -F";" '{print $2}');
 author=$(echo $line | awk -F";" '{print $3}');
 row=$(echo $line | awk -F";" '{print $NR}');
 
-echo;
-echo "Row: $row";
-echo "Title: $title";
-echo "Author: $author";
+if [ $DEBUG  == 1 ]
+then
+    echo;
+    echo "Row: $row";
+    echo "Title: $title";
+    echo "Author: $author";
+fi
 
-#if [ $row -gt 10 ];
+#if [ $row -gt 20 ];
 #then
 #    break;
 #fi
 
     received=$(curl $URL$title"_"%28$author%29 2>&1 | awk '/<div class=\"poem\">/{p=1;next}/<\x2fdiv>/{p=0}p{print}' | sed '/<sup/,/<\/sup>/d');
     length=${#received};
-    echo "Use title and author to search ...";
-    echo "Content length: $length";
 
+    if [ $DEBUG  == 1 ]
+    then
+        echo "Use title and author to search ...";
+        echo "Content length: $length";
+    fi
+    
     if [ $length -gt 0 ];
     then
         received=$(echo $received | sed 's/<[^>]*>//g');
@@ -122,13 +147,22 @@ echo "Author: $author";
     # Get title and author in traditional Chinese
     title=$(awk -F";" -v var="$row" 'NR==var{print $2}' exppoemsbg5.csv);
     author=$(awk -F";" -v var="$row" 'NR==var{print $3}' exppoemsbg5.csv);
-    echo "Title in traditional Chinese: $title";
-    echo "Author in traditional Chinese: $author";
+    
+    if [ $DEBUG  == 1 ]
+    then
+        echo "Title in traditional Chinese: $title";
+        echo "Author in traditional Chinese: $author";
+    fi
 
     received=$(curl $URL$title"_"%28$author%29 2>&1 | awk '/<div class=\"poem\">/{p=1;next}/<\x2fdiv>/{p=0}p{print}');
     length=${#received};
-    echo "Use traditional Chinese to search...";
-    echo "Content length: $length";
+
+    if [ $DEBUG  == 1 ]
+    then
+        echo "Use traditional Chinese to search...";
+        echo "Content length: $length";
+    fi
+    
     if [ $length -gt 0 ];
     then
         received=$(echo $received | sed 's/<[^>]*>//g');
@@ -137,7 +171,12 @@ echo "Author: $author";
     fi
     
     # Try title only. Still use traditional Chinese.
-    echo "Use only title to search...";
+
+    if [ $DEBUG  == 1 ]
+    then
+        echo "Use only title to search...";
+    fi
+    
     #result=$(curl $URL$title 2>&1 | awk '/<div class=\"poem\">/{p=1;next}/<\x2fdiv>/{p=0}p{print}');
     
     response=$(curl $URL$title 2>&1);
@@ -147,19 +186,33 @@ echo "Author: $author";
     ### 唐多令(ambiguity)
 
     check_ambiguity=$(grep "$AMBIGUITY" <<< $response);
-    echo "Check ambiguity: $check_ambiguity";
-
+    
+    if [ $DEBUG  == 1 ]
+    then   
+        echo "Check ambiguity: $check_ambiguity";
+    fi
+    
     if [ ${#check_ambiguity} -eq 0 ]
     then
         # Check correctness of the result since author is not used in search.
         check_author=$(grep "Author:$author" <<< $response); # colon?
-        echo "Check author: $check_author";
+        
+        if [ $DEBUG  == 1 ]
+        then
+            echo "Check author: $check_author";
+        fi
+        
         if [ ${#check_author} -gt 0 ] 
         then
             received=$(echo "$response" | awk '/<div class=\"poem\">/{p=1;next}/<\x2fdiv>/{p=0}p{print}');
-            #echo "Received: $received";
             length=${#received};
-            echo "Content length: $length";
+
+            if [ $DEBUG  == 1 ]
+            then
+                echo "Received: $received";  
+                echo "Content length: $length";
+            fi
+            
             if [ $length -gt 0 ];
             then
                 received=$(echo $received | sed 's/<[^>]*>//g');
@@ -171,11 +224,21 @@ echo "Author: $author";
         fi
         
     else
-        echo "Processing ambiguity";
+
+        if [ $DEBUG  == 1 ]
+        then
+            echo "Processing ambiguity";
+        fi
+        
         received=$(echo "$response" | awk '/可以指/{p=1}/<ul>/{f=1; if(p==1 && f==1) {print}} /<\x2ful>/{f=0; if (p==1 && f==0) {print; exit;}}' | awk -F"\"" '{print $2}');
         #echo "Received: $received";
         proc_ambiguity;
-        echo "Found? $found";
+
+        if [ $DEBUG  == 1 ]
+        then
+            echo "Found? $found";
+        fi
+        
         if [ $found == $NOT_FOUND ]
         then
             proc_not_found;
